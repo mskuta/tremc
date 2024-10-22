@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
 ########################################################################
@@ -14,44 +13,39 @@
 # http://www.gnu.org/licenses/gpl-3.0.txt                              #
 ########################################################################
 
-import json
-import time
-import datetime
-import re
-import base64
-import socket
 import argparse
-import sys
-import os
-import signal
-import unicodedata
-import locale
+import base64
+import configparser
 import curses
 import curses.ascii
-from textwrap import wrap
-from subprocess import call, Popen
+import datetime
+import enum
+import json
+import locale
 import netrc
 import operator
-import urllib.request
+import os
+import re
+import signal
+import socket
+import sys
+import time
+import unicodedata
 import urllib.error
 import urllib.parse
-import configparser
-import enum
-try:
-    import IPy
-except ImportError:
-    pass
-try:
-    import pyperclip
-except ImportError:
-    pass
+import urllib.request
+from subprocess import Popen, call
+from textwrap import wrap
+
+import IPy
+import pyperclip
 
 locale.setlocale(locale.LC_ALL, '')
 PROG = 'tremc'
 
 # Global constants and constant configuration
 class GConfig:
-    VERSION = '0.9.3'
+    VERSION = '0.9.3+mskuta1.0.0'
 
     TRNSM_VERSION_MIN = '1.90'
     TRNSM_VERSION_MAX = '3.0.0'
@@ -172,14 +166,10 @@ class GConfig:
             config.set('Connection', 'password', self.password)
             create_config(self.configfile, self.connection)
 
-        try:
-            self.ipy = True  # extract ipv4 from ipv6 addresses
-            self.IPV6_RANGE_6TO4 = IPy.IP('2002::/16')
-            self.IPV6_RANGE_TEREDO = IPy.IP('2001::/32')
-            self.IPV4_ONES = 0xffffffff
-        except NameError:
-            self.ipy = False
-        self.clipboard = 'pyperclip' in sys.modules
+        # extract ipv4 from ipv6 addresses
+        self.IPV6_RANGE_6TO4 = IPy.IP('2002::/16')
+        self.IPV6_RANGE_TEREDO = IPy.IP('2001::/32')
+        self.IPV4_ONES = 0xffffffff
 
         self.sort_options = [
             ('name', '_Name'), ('addedDate', '_Age'), ('percentDone', '_Progress'),
@@ -505,14 +495,13 @@ def country_code_by_addr_vany(geo_ip, geo_ip6, addr):
         return geo_ip.country_code_by_addr(addr)
     if ':' not in addr:
         return '?'
-    if gconfig.ipy:
-        ip = IPy.IP(addr)
-        if ip in gconfig.IPV6_RANGE_6TO4:
-            addr = str(IPy.IP(ip.int() >> 80 & gconfig.IPV4_ONES))
-            return geo_ip.country_code_by_addr(addr)
-        if ip in gconfig.IPV6_RANGE_TEREDO:
-            addr = str(IPy.IP(ip.int() & gconfig.IPV4_ONES ^ gconfig.IPV4_ONES))
-            return geo_ip.country_code_by_addr(addr)
+    ip = IPy.IP(addr)
+    if ip in gconfig.IPV6_RANGE_6TO4:
+        addr = str(IPy.IP(ip.int() >> 80 & gconfig.IPV4_ONES))
+        return geo_ip.country_code_by_addr(addr)
+    if ip in gconfig.IPV6_RANGE_TEREDO:
+        addr = str(IPy.IP(ip.int() & gconfig.IPV4_ONES ^ gconfig.IPV4_ONES))
+        return geo_ip.country_code_by_addr(addr)
     if hasattr(geo_ip6, 'country_code_by_addr_v6'):
         return geo_ip6.country_code_by_addr_v6(addr)
     return '?'
@@ -1944,7 +1933,7 @@ class Interface:
         self.server.increase_bandwidth_priority(self.selected_ids())
 
     def action_copy_magnet_link(self):
-        if self.focus > -1 and gconfig.clipboard:
+        if self.focus > -1:
             magnet = self.torrents[self.focus]['magnetLink']
             try:
                 pyperclip.copy(magnet)

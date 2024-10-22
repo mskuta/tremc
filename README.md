@@ -7,12 +7,12 @@ A console client for the BitTorrent client
 
 ## Requirements
 
-Python 3.2
+- Python 3.2
+- Module [pyperclip](https://pypi.org/project/pyperclip/) is used. Check its requirements if you want to copy magnet links to the system clipboard.
 
 ### Optional Modules
 
 - python-GeoIP or python-GeoIP2: Guess which country peers come from.
-- [python-pyperclip](https://pypi.org/project/pyperclip/): Copy magnet links to the system clipboard. You will also need either xclip on Linux or pbcopy on OS X for this to work.
 
 ## Usage
 

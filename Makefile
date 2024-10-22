@@ -1,11 +1,21 @@
-.PHONY: install
+APP      := tremc
+BUILDDIR := build
+PREFIX   ?= $(HOME)/.local
 
-install:
-	install -d "${DESTDIR}${PREFIX}/share/man/man1"
-	install -m 644 tremc.1 "${DESTDIR}${PREFIX}/share/man/man1/tremc.1"
-	install -d "${DESTDIR}${PREFIX}/bin"
-	install -m 755 tremc "${DESTDIR}${PREFIX}/bin/tremc"
-	install -d "${DESTDIR}${PREFIX}/share/bash-completion/completions"
-	install -m 644 "completion/bash/tremc.sh" "${DESTDIR}${PREFIX}/share/bash-completion/completions/tremc"
-	install -d "${DESTDIR}${PREFIX}/share/zsh/site-functions/"
-	install -m 644 "completion/zsh/_tremc" "${DESTDIR}${PREFIX}/share/zsh/site-functions/_tremc"
+$(APP): $(APP).py
+	mkdir -p "$(BUILDDIR)"
+	cp $< "$(BUILDDIR)/__main__.py"
+	python3 -m pip install --target="$(BUILDDIR)" --upgrade 'IPy==1.*' 'pyperclip>=1.9.0,<2.0.0'
+	python3 -m zipapp "$(BUILDDIR)" --output=$@ --python='/usr/bin/env python3'
+
+.PHONY: clean
+clean:
+	-rm -r $(APP) "$(BUILDDIR)"
+
+.PHONY: install
+install: $(APP)
+	install -D -m 755 $< "$(PREFIX)/bin/tremc"
+	install -D -m 644 tremc.1 "$(PREFIX)/share/man/man1/tremc.1"
+	install -D -m 644 "completion/bash/tremc.sh" "$(PREFIX)/share/bash-completion/completions/tremc"
+	install -D -m 644 "completion/zsh/_tremc" "$(PREFIX)/share/zsh/site-functions/_tremc"
+
