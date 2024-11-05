@@ -37,7 +37,7 @@ import urllib.request
 from subprocess import Popen, call
 from textwrap import wrap
 
-import IPy
+import geoip2.database
 import pyperclip
 
 locale.setlocale(locale.LC_ALL, '')
@@ -45,7 +45,7 @@ PROG = 'tremc'
 
 # Global constants and constant configuration
 class GConfig:
-    VERSION = '0.9.3+mskuta1.0.0'
+    VERSION = '0.9.3+mskuta1.1.0'
 
     TRNSM_VERSION_MIN = '1.90'
     TRNSM_VERSION_MAX = '3.0.0'
@@ -121,7 +121,10 @@ class GConfig:
             self.history_file = os.path.join(os.path.dirname(self.configfile), 'history.json')
         elif PROG in os.path.basename(self.configfile):
             self.history_file = self.configfile.rsplit(PROG, 1)[0] + PROG + '-history.json'
-        self.geoip2_database = config.get('Misc', 'geoip2_database', fallback='')
+        if config.has_option('Misc', 'geoip_database'):
+            self.geoip_database = config.get('Misc', 'geoip_database')
+        else:
+            self.geoip_database = config.get('Misc', 'geoip2_database', fallback='')
 
         self.rdns = self.rdns ^ config.getboolean('Misc', 'rdns', fallback=False)
 
@@ -165,11 +168,6 @@ class GConfig:
             config.set('Connection', 'username', self.username)
             config.set('Connection', 'password', self.password)
             create_config(self.configfile, self.connection)
-
-        # extract ipv4 from ipv6 addresses
-        self.IPV6_RANGE_6TO4 = IPy.IP('2002::/16')
-        self.IPV6_RANGE_TEREDO = IPy.IP('2001::/32')
-        self.IPV4_ONES = 0xffffffff
 
         self.sort_options = [
             ('name', '_Name'), ('addedDate', '_Age'), ('percentDone', '_Progress'),
@@ -485,28 +483,6 @@ class Keys:
 
 K = Keys()
 
-def country_code_by_addr_vany(geo_ip, geo_ip6, addr):
-    if gconfig.geoip2:
-        try:
-            return geo_ip.country(addr).country.iso_code
-        except Exception:
-            return '?'
-    if '.' in addr:
-        return geo_ip.country_code_by_addr(addr)
-    if ':' not in addr:
-        return '?'
-    ip = IPy.IP(addr)
-    if ip in gconfig.IPV6_RANGE_6TO4:
-        addr = str(IPy.IP(ip.int() >> 80 & gconfig.IPV4_ONES))
-        return geo_ip.country_code_by_addr(addr)
-    if ip in gconfig.IPV6_RANGE_TEREDO:
-        addr = str(IPy.IP(ip.int() & gconfig.IPV4_ONES ^ gconfig.IPV4_ONES))
-        return geo_ip.country_code_by_addr(addr)
-    if hasattr(geo_ip6, 'country_code_by_addr_v6'):
-        return geo_ip6.country_code_by_addr_v6(addr)
-    return '?'
-
-
 def pdebug(*argv):
     if gconfig.DEBUG:
         print(time.time() - gconfig.STARTTIME, ": ", *argv, file=gconfig.debug_file, flush=True)
@@ -746,20 +722,10 @@ class Transmission:
         self.hosts_cache = dict()
 
         self.geo_ips_cache = dict()
-        if gconfig.geoip1:
-            self.geo_ip = GeoIP.new(GeoIP.GEOIP_MEMORY_CACHE)
-            try:
-                self.geo_ip6 = GeoIP.open_type(GeoIP.GEOIP_COUNTRY_EDITION_V6, GeoIP.GEOIP_MEMORY_CACHE)
-            except AttributeError:
-                self.geo_ip6 = None
-            except GeoIP.error:
-                self.geo_ip6 = None
-        elif gconfig.geoip2:
-            self.geo_ip6 = None
-            try:
-                self.geo_ip = geoip2.database.Reader(gconfig.geoip2_database)
-            except Exception:
-                gconfig.geoip = False
+        try:
+            self.geo_ip = geoip2.database.Reader(gconfig.geoip_database)
+        except Exception:
+            self.geo_ip = None
 
         # make sure there are no undefined values
         self.wait_for_torrentlist_update()
@@ -889,8 +855,11 @@ class Transmission:
             # resolve and locate peer's ip
             if gconfig.rdns and ip not in self.hosts_cache:
                 threading.Thread(target=reverse_dns, args=(self.hosts_cache, ip), daemon=True).start()
-            if gconfig.geoip and ip not in self.geo_ips_cache:
-                self.geo_ips_cache[ip] = country_code_by_addr_vany(self.geo_ip, self.geo_ip6, ip)
+            if self.geo_ip and ip not in self.geo_ips_cache:
+                try:
+                    self.geo_ips_cache[ip] = self.geo_ip.country(ip).country.iso_code
+                except Exception:
+                    self.geo_ips_cache[ip] = '?'
 
     def get_rpc_version(self):
         return self.rpc_version
@@ -3351,8 +3320,7 @@ class Interface:
             (self.torrent_details['peersSendingToUs'], self.torrent_details['peersGettingFromUs'])
         column_names += 'Client'.ljust(clientname_width + 1) \
             + 'Address'.ljust(address_width + port_width + 1)
-        if gconfig.geoip:
-            column_names += 'Country'
+        column_names += ' Country'
         if gconfig.rdns:
             column_names += ' Host'
 
@@ -3409,8 +3377,7 @@ class Interface:
                                 + ':' + str(peer['port']).ljust(port_width) + ' ')
             # Country
             if self.width >= 55 + clientname_width + address_width + port_width + 3 + 7:
-                if gconfig.geoip:
-                    self.pad.addstr("  %2s   " % geo_ips[peer['address']])
+                self.pad.addstr("  %2s   " % geo_ips.get(peer['address'], '--'))
             # Host
             if self.width >= 55 + clientname_width + address_width + port_width + 3 + 10:
                 if gconfig.rdns:
@@ -5269,36 +5236,6 @@ if __name__ == '__main__':
             import threading
         except ImportError:
             gconfig.rdns = False
-
-    gconfig.geoip1 = False
-    gconfig.geoip2 = False
-    try:
-        import geoip2.database
-        gconfig.geoip2 = True
-    except ImportError:
-        pass
-    if gconfig.geoip2:
-        if not os.path.isfile(gconfig.geoip2_database):
-            try:
-                for l in open('/etc/GeoIP.conf', "r").read():
-                    s = l.split()
-                    if len(s) == 2 and s[0] == 'DatabaseDirectory':
-                        gconfig.geoip2_database = s[1] + '/GeoLite2-Country.mmdb'
-            except Exception:
-                pass
-        if not os.path.isfile(gconfig.geoip2_database):
-            gconfig.geoip2_database = "/usr/share/GeoIP/GeoLite2-Country.mmdb"
-        if not os.path.isfile(gconfig.geoip2_database):
-            gconfig.geoip2_database = "/var/lib/GeoIP/GeoLite2-Country.mmdb"
-        if not os.path.isfile(gconfig.geoip2_database):
-            gconfig.geoip2 = False
-    if not gconfig.geoip2:
-        try:
-            import GeoIP
-            gconfig.geoip1 = True
-        except ImportError:
-            pass
-    gconfig.geoip = gconfig.geoip1 or gconfig.geoip2
 
     norm = Normalizer()
 
