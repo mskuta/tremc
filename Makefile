@@ -5,7 +5,7 @@ PREFIX   ?= $(HOME)/.local
 $(APP): $(APP).py
 	mkdir -p "$(BUILDDIR)"
 	cp $< "$(BUILDDIR)/__main__.py"
-	python3 -m pip install --target="$(BUILDDIR)" --upgrade 'IPy==1.*' 'pyperclip>=1.9.0,<2.0.0'
+	python3 -m pip install --target="$(BUILDDIR)" --upgrade 'geoip2>=4.8.0,<5.0.0' 'pyperclip>=1.9.0,<2.0.0'
 	python3 -m zipapp "$(BUILDDIR)" --output=$@ --python='/usr/bin/env python3'
 
 .PHONY: clean

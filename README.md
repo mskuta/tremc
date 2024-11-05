@@ -10,10 +10,6 @@ A console client for the BitTorrent client
 - Python 3.2
 - Module [pyperclip](https://pypi.org/project/pyperclip/) is used. Check its requirements if you want to copy magnet links to the system clipboard.
 
-### Optional Modules
-
-- python-GeoIP or python-GeoIP2: Guess which country peers come from.
-
 ## Usage
 
 ### Connection information
@@ -286,7 +282,7 @@ The following sections are read:
     The string %%s is replaced by the file name.
   * file_open_in_terminal (boolean).
   * rdns (boolean), the value True enables showing the reverse DNS of connected peers.
-  * geoip2_database, The location of the Python-GeoIP2 database file. If this key does not exist, or does not point to a file, the database is also searched for in some commonly used locations.
+  * geoip_database, location of a MaxMind database file.
   * cancel, List of keys that act as cancel key in dialog windows. Printable characters are allowed, but act as cancel key only when not entering text.
 
     Default is Escape, Break and q.
